@@ -90,14 +90,15 @@ pub const Grid = struct {
         self.cellQueue.len = 0;
         try self.cellQueue.pushBackBounded(i);
         while (self.cellQueue.popFront()) |cellIndex| {
-            var surroundingCellIter = SurroundingCellIndexIterator.init(self.width, self.gridLength(), cellIndex);
-            while (surroundingCellIter.next()) |surroundingCellIndex| {
-                if (!self.visibleCells.isSet(surroundingCellIndex) and !self.mineCells.isSet(surroundingCellIndex)) {
-                    self.visibleCells.set(surroundingCellIndex);
+            var surroundingCells = SurroundingCellIndexIterator.init(self.width, self.gridLength(), cellIndex);
+            while (surroundingCells.next()) |surroundingCellIndex| {
+                if (self.visibleCells.isSet(surroundingCellIndex) or self.mineCells.isSet(surroundingCellIndex)) {
+                    continue;
+                }
 
+                    self.visibleCells.set(surroundingCellIndex);
                     if (self.surroundingMineCounts[surroundingCellIndex] == 0) {
                         try self.cellQueue.pushBackBounded(surroundingCellIndex);
-                    }
                 }
             }
         }
