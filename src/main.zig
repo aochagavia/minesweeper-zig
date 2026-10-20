@@ -5,7 +5,7 @@ const minesweeper = @import("minesweeper");
 const Grid = minesweeper.Grid;
 
 pub fn main(init: std.process.Init) !void {
-    const gpa: std.mem.Allocator = init.gpa;
+    const gpa = init.gpa;
     const io = init.io;
 
     var stdout_buffer: [1024]u8 = undefined;
@@ -14,7 +14,7 @@ pub fn main(init: std.process.Init) !void {
 
     var seed: u64 = undefined;
     io.random(std.mem.asBytes(&seed));
-    var rng = std.Random.DefaultPrng.init(seed);
+    var rng: std.Random.DefaultPrng = .init(seed);
 
     var grid = try Grid.init(gpa, rng.random(), 10, 10, 20);
     defer grid.deinit(gpa);
@@ -28,8 +28,8 @@ pub fn main(init: std.process.Init) !void {
     var stdin_file_reader: Io.File.Reader = .init(.stdin(), io, &stdin_buffer);
     const stdin_reader = &stdin_file_reader.interface;
 
-    var gameState = minesweeper.GameState.ongoing;
-    while (gameState == minesweeper.GameState.ongoing) {
+    var gameState: minesweeper.GameState = .ongoing;
+    while (gameState == .ongoing) {
         const raw = try stdin_reader.takeDelimiter('\n') orelse break;
         const line = std.mem.trim(u8, raw, " \r\t");
         var parts = std.mem.tokenizeScalar(u8, line, ' ');
@@ -62,11 +62,6 @@ pub fn main(init: std.process.Init) !void {
                     try stdout_writer.print("The coordinates {d}, {d} are out of bounds\n", .{ x, y });
                     try stdout_writer.flush();
                     continue;
-                },
-                error.OutOfMemory => {
-                    try stdout_writer.print("Internal error: ran out of memory while revealing hidden cells\n", .{});
-                    try stdout_writer.flush();
-                    return;
                 },
             };
         }

@@ -80,21 +80,20 @@ pub const Grid = struct {
         return error.OutOfBounds;
     }
 
-    pub fn revealCell(self: *Grid, x: usize, y: usize) error{ OutOfBounds, OutOfMemory }!GameState {
+    pub fn revealCell(self: *Grid, x: usize, y: usize) error{OutOfBounds}!GameState {
         const i = try self.coordsToGridIndex(x, y);
 
         if (self.visibleCells.isSet(i)) {
-            return GameState.ongoing;
+            return .ongoing;
         }
         self.visibleCells.set(i);
 
         if (self.mineCells.isSet(i)) {
-            return GameState.lost;
+            return .lost;
         }
 
         // Recursive cell reveal
-        self.cellQueue.len = 0;
-        try self.cellQueue.pushBackBounded(i);
+        self.cellQueue.pushBackAssumeCapacity(i);
         while (self.cellQueue.popFront()) |cellIndex| {
             var surroundingCells = SurroundingCellIndexIterator.init(self.width, self.gridLength(), cellIndex);
             while (surroundingCells.next()) |surroundingCellIndex| {
@@ -104,7 +103,7 @@ pub const Grid = struct {
 
                 self.visibleCells.set(surroundingCellIndex);
                 if (self.surroundingMineCounts[surroundingCellIndex] == 0) {
-                    try self.cellQueue.pushBackBounded(surroundingCellIndex);
+                    self.cellQueue.pushBackAssumeCapacity(surroundingCellIndex);
                 }
             }
         }
@@ -113,10 +112,10 @@ pub const Grid = struct {
         const totalMines: usize = self.mineCells.count();
         const totalHiddenCells: usize = self.visibleCells.bit_length - self.visibleCells.count();
         if (totalHiddenCells == totalMines) {
-            return GameState.won;
+            return .won;
         }
 
-        return GameState.ongoing;
+        return .ongoing;
     }
 
     pub fn markCell(self: *Grid, x: usize, y: usize) error{OutOfBounds}!void {
@@ -124,24 +123,17 @@ pub const Grid = struct {
         self.markedCells.toggle(i);
     }
 
-    pub fn display(self: *Grid, writer: *Io.Writer) !void {
+    pub fn display(self: *const Grid, writer: *Io.Writer) Io.Writer.Error!void {
         // Horizontal axis coordinates
-        try writer.print("   ", .{});
+        try writer.writeAll("   ");
         for (0..self.width) |x| {
-            if (x < 10) {
-                try writer.print(" ", .{});
-            }
-            try writer.print("{d} ", .{x});
+            try writer.print("{d:>2} ", .{x});
         }
-        try writer.print("\n\n", .{});
+        try writer.writeAll("\n\n");
 
         // Vertical axis coordinates + each row's cells
         for (0..self.height) |y| {
-            try writer.print("{d} ", .{y});
-            if (y < 10) {
-                try writer.print(" ", .{});
-            }
-
+            try writer.print("{d:<2} ", .{y});
             for (0..self.width) |x| {
                 const i = y * self.width + x;
                 const visible = self.visibleCells.isSet(i);
@@ -150,40 +142,40 @@ pub const Grid = struct {
 
                 if (visible) {
                     if (mine) {
-                        try writer.print(" * ", .{});
+                        try writer.writeAll(" * ");
                     } else {
                         const mineCount = self.surroundingMineCounts[i];
                         if (mineCount == 0) {
-                            try writer.print("   ", .{});
+                            try writer.writeAll("   ");
                         } else {
                             try writer.print(" {d} ", .{mineCount});
                         }
                     }
                 } else {
                     if (marked) {
-                        try writer.print("[x]", .{});
+                        try writer.writeAll("[x]");
                     } else {
-                        try writer.print("[ ]", .{});
+                        try writer.writeAll("[ ]");
                     }
                 }
             }
 
-            try writer.print("\n", .{});
+            try writer.writeAll("\n");
         }
     }
 };
 
 pub const GameState = enum { won, lost, ongoing };
 
-const SurroundingOffsets: [8]struct { HorizontalOffset, VerticalOffset } = .{
-    .{ HorizontalOffset.Left, VerticalOffset.Up },
-    .{ HorizontalOffset.None, VerticalOffset.Up },
-    .{ HorizontalOffset.Right, VerticalOffset.Up },
-    .{ HorizontalOffset.Left, VerticalOffset.None },
-    .{ HorizontalOffset.Right, VerticalOffset.None },
-    .{ HorizontalOffset.Left, VerticalOffset.Down },
-    .{ HorizontalOffset.None, VerticalOffset.Down },
-    .{ HorizontalOffset.Right, VerticalOffset.Down },
+const surrounding_offsets: [8]struct { HorizontalOffset, VerticalOffset } = .{
+    .{ .left, .up },
+    .{ .none, .up },
+    .{ .right, .up },
+    .{ .left, .none },
+    .{ .right, .none },
+    .{ .left, .down },
+    .{ .none, .down },
+    .{ .right, .down },
 };
 
 const SurroundingCellIndexIterator = struct {
@@ -198,12 +190,12 @@ const SurroundingCellIndexIterator = struct {
 
     pub fn next(self: *SurroundingCellIndexIterator) ?usize {
         while (self.currentOffsetIndex < 8) {
-            const horizontalOffset, const verticalOffset = SurroundingOffsets[self.currentOffsetIndex];
+            const horizontalOffset, const verticalOffset = surrounding_offsets[self.currentOffsetIndex];
             self.currentOffsetIndex += 1;
 
             var surroundingCellIndex = self.cellIndex;
             switch (horizontalOffset) {
-                .Left => {
+                .left => {
                     const hasLeft = self.cellIndex % self.gridWidth != 0;
                     if (hasLeft) {
                         surroundingCellIndex -= 1;
@@ -211,7 +203,7 @@ const SurroundingCellIndexIterator = struct {
                         continue;
                     }
                 },
-                .Right => {
+                .right => {
                     const hasRight = self.cellIndex % self.gridWidth != self.gridWidth - 1;
                     if (hasRight) {
                         surroundingCellIndex += 1;
@@ -219,11 +211,11 @@ const SurroundingCellIndexIterator = struct {
                         continue;
                     }
                 },
-                .None => {},
+                .none => {},
             }
 
             switch (verticalOffset) {
-                .Up => {
+                .up => {
                     const hasUp = self.cellIndex >= self.gridWidth;
                     if (hasUp) {
                         surroundingCellIndex -= self.gridWidth;
@@ -231,7 +223,7 @@ const SurroundingCellIndexIterator = struct {
                         continue;
                     }
                 },
-                .Down => {
+                .down => {
                     const hasDown = self.cellIndex < self.gridLength - self.gridWidth;
                     if (hasDown) {
                         surroundingCellIndex += self.gridWidth;
@@ -239,7 +231,7 @@ const SurroundingCellIndexIterator = struct {
                         continue;
                     }
                 },
-                .None => {},
+                .none => {},
             }
 
             return surroundingCellIndex;
@@ -250,15 +242,15 @@ const SurroundingCellIndexIterator = struct {
 };
 
 const HorizontalOffset = enum {
-    Left,
-    None,
-    Right,
+    left,
+    none,
+    right,
 };
 
 const VerticalOffset = enum {
-    Up,
-    None,
-    Down,
+    up,
+    none,
+    down,
 };
 
 test "surrounding cell index iterator at 0" {
@@ -266,6 +258,7 @@ test "surrounding cell index iterator at 0" {
     try std.testing.expectEqual(1, iter.next());
     try std.testing.expectEqual(10, iter.next());
     try std.testing.expectEqual(11, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "surrounding cell index iterator at 1" {
@@ -275,6 +268,7 @@ test "surrounding cell index iterator at 1" {
     try std.testing.expectEqual(10, iter.next());
     try std.testing.expectEqual(11, iter.next());
     try std.testing.expectEqual(12, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "surrounding cell index iterator at 9" {
@@ -282,6 +276,7 @@ test "surrounding cell index iterator at 9" {
     try std.testing.expectEqual(8, iter.next());
     try std.testing.expectEqual(18, iter.next());
     try std.testing.expectEqual(19, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "surrounding cell index iterator at 90" {
@@ -289,6 +284,7 @@ test "surrounding cell index iterator at 90" {
     try std.testing.expectEqual(80, iter.next());
     try std.testing.expectEqual(81, iter.next());
     try std.testing.expectEqual(91, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "surrounding cell index iterator at 99" {
@@ -296,6 +292,7 @@ test "surrounding cell index iterator at 99" {
     try std.testing.expectEqual(88, iter.next());
     try std.testing.expectEqual(89, iter.next());
     try std.testing.expectEqual(98, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "surrounding cell index iterator at 55" {
@@ -308,6 +305,7 @@ test "surrounding cell index iterator at 55" {
     try std.testing.expectEqual(64, iter.next());
     try std.testing.expectEqual(65, iter.next());
     try std.testing.expectEqual(66, iter.next());
+    try std.testing.expectEqual(null, iter.next());
 }
 
 test "grid cleanup" {
