@@ -38,12 +38,12 @@ pub fn main(init: std.process.Init) !void {
         const yStr = parts.next() orelse continue;
 
         const x = std.fmt.parseInt(usize, xStr, 10) catch |err| {
-            try stdout_writer.print("Invalid number for the x coordinate: `{s}` ({t})", .{ xStr, err });
+            try stdout_writer.print("Invalid number for the x coordinate: `{s}` ({t})\n", .{ xStr, err });
             try stdout_writer.flush();
             continue;
         };
         const y = std.fmt.parseInt(usize, yStr, 10) catch |err| {
-            try stdout_writer.print("Invalid number for the x coordinate: `{s}` ({t})", .{ xStr, err });
+            try stdout_writer.print("Invalid number for the y coordinate: `{s}` ({t})\n", .{ yStr, err });
             try stdout_writer.flush();
             continue;
         };
@@ -51,7 +51,7 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, command, "m")) {
             grid.markCell(x, y) catch |err| switch (err) {
                 error.OutOfBounds => {
-                    try stdout_writer.print("The coordinates {d}, {d} are out of bounds", .{ x, y });
+                    try stdout_writer.print("The coordinates {d}, {d} are out of bounds\n", .{ x, y });
                     try stdout_writer.flush();
                     continue;
                 },
@@ -59,12 +59,12 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, command, "s")) {
             gameState = grid.revealCell(x, y) catch |err| switch (err) {
                 error.OutOfBounds => {
-                    try stdout_writer.print("The coordinates {d}, {d} are out of bounds", .{ x, y });
+                    try stdout_writer.print("The coordinates {d}, {d} are out of bounds\n", .{ x, y });
                     try stdout_writer.flush();
                     continue;
                 },
                 error.OutOfMemory => {
-                    try stdout_writer.print("Internal error: ran out of memory while revealing hidden cells", .{});
+                    try stdout_writer.print("Internal error: ran out of memory while revealing hidden cells\n", .{});
                     try stdout_writer.flush();
                     return;
                 },
