@@ -71,11 +71,16 @@ pub const Grid = struct {
         return self.width * self.height;
     }
 
-    pub fn revealCell(self: *Grid, x: usize, y: usize) error{ OutOfBounds, OutOfMemory }!GameState {
-        const i = y * self.width + x;
-        if (i >= self.gridLength()) {
-            return error.OutOfBounds;
+    fn coordsToGridIndex(self: *const Grid, x: usize, y: usize) error{OutOfBounds}!usize {
+        if (x < self.width and y < self.height) {
+            return y * self.width + x;
         }
+
+        return error.OutOfBounds;
+    }
+
+    pub fn revealCell(self: *Grid, x: usize, y: usize) error{ OutOfBounds, OutOfMemory }!GameState {
+        const i = try self.coordsToGridIndex(x, y);
 
         if (self.visibleCells.isSet(i)) {
             return GameState.ongoing;
@@ -96,9 +101,9 @@ pub const Grid = struct {
                     continue;
                 }
 
-                    self.visibleCells.set(surroundingCellIndex);
-                    if (self.surroundingMineCounts[surroundingCellIndex] == 0) {
-                        try self.cellQueue.pushBackBounded(surroundingCellIndex);
+                self.visibleCells.set(surroundingCellIndex);
+                if (self.surroundingMineCounts[surroundingCellIndex] == 0) {
+                    try self.cellQueue.pushBackBounded(surroundingCellIndex);
                 }
             }
         }
@@ -114,11 +119,7 @@ pub const Grid = struct {
     }
 
     pub fn markCell(self: *Grid, x: usize, y: usize) error{OutOfBounds}!void {
-        const i = y * self.width + x;
-        if (i >= self.gridLength()) {
-            return error.OutOfBounds;
-        }
-
+        const i = try self.coordsToGridIndex(x, y);
         self.markedCells.toggle(i);
     }
 
