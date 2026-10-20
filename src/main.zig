@@ -12,7 +12,9 @@ pub fn main(init: std.process.Init) !void {
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout_writer = &stdout_file_writer.interface;
 
-    var rng = std.Random.DefaultPrng.init(0);
+    var seed: u64 = undefined;
+    io.random(std.mem.asBytes(&seed));
+    var rng = std.Random.DefaultPrng.init(seed);
 
     var grid = try Grid.init(gpa, rng.random(), 10, 10, 20);
     defer grid.deinit(gpa);
