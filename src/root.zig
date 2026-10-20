@@ -27,7 +27,6 @@ pub const Grid = struct {
         const visibleCells = try std.bit_set.Dynamic.initEmpty(a, len);
         const markedCells = try std.bit_set.Dynamic.initEmpty(a, len);
 
-        const surroundingMineCounts = try a.alloc(u4, len);
         const cellQueue = try std.Deque(usize).initCapacity(a, len);
 
         // Place mines
@@ -41,6 +40,8 @@ pub const Grid = struct {
         }
 
         // Calculate mines surrounding each cell
+        const surroundingMineCounts = try a.alloc(u4, len);
+        @memset(surroundingMineCounts, 0);
         for (0..len) |i| {
             if (mineCells.isSet(i)) {
                 continue;
