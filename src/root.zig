@@ -94,7 +94,10 @@ pub const Grid = struct {
             while (surroundingCellIter.next()) |surroundingCellIndex| {
                 if (!self.visibleCells.isSet(surroundingCellIndex) and !self.mineCells.isSet(surroundingCellIndex)) {
                     self.visibleCells.set(surroundingCellIndex);
-                    try self.cellQueue.pushBackBounded(surroundingCellIndex);
+
+                    if (self.surroundingMineCounts[surroundingCellIndex] == 0) {
+                        try self.cellQueue.pushBackBounded(surroundingCellIndex);
+                    }
                 }
             }
         }
