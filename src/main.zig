@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
     while (gameState == minesweeper.GameState.ongoing) {
         const raw = try stdin_reader.takeDelimiter('\n') orelse break;
         const line = std.mem.trim(u8, raw, " \r\t");
-        var parts = std.mem.splitSequence(u8, line, " ");
+        var parts = std.mem.tokenizeScalar(u8, line, ' ');
         const command = parts.next() orelse continue;
         const xStr = parts.next() orelse continue;
         const yStr = parts.next() orelse continue;
