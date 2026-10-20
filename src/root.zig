@@ -17,17 +17,23 @@ pub const Grid = struct {
     // keeps memory usage bounded
     cellQueue: std.Deque(usize),
 
-    pub fn init(a: std.mem.Allocator, rng: std.Random, width: usize, height: usize, mines: usize) !Grid {
+    pub const InitError = error{MoreMinesThanCells} || std.mem.Allocator.Error;
+
+    pub fn init(a: std.mem.Allocator, rng: std.Random, width: usize, height: usize, mines: usize) InitError!Grid {
         const len = width * height;
         if (mines >= len) {
             return error.MoreMinesThanCells;
         }
 
         var mineCells = try std.bit_set.Dynamic.initEmpty(a, len);
-        const visibleCells = try std.bit_set.Dynamic.initEmpty(a, len);
-        const markedCells = try std.bit_set.Dynamic.initEmpty(a, len);
+        errdefer mineCells.deinit(a);
+        var visibleCells = try std.bit_set.Dynamic.initEmpty(a, len);
+        errdefer visibleCells.deinit(a);
+        var markedCells = try std.bit_set.Dynamic.initEmpty(a, len);
+        errdefer markedCells.deinit(a);
 
-        const cellQueue = try std.Deque(usize).initCapacity(a, len);
+        var cellQueue = try std.Deque(usize).initCapacity(a, len);
+        errdefer cellQueue.deinit(a);
 
         // Place mines
         var placedMines: usize = 0;
@@ -313,4 +319,16 @@ test "grid cleanup" {
     var rng = std.Random.DefaultPrng.init(0);
     var grid = try Grid.init(a, rng.random(), 20, 10, 12);
     defer grid.deinit(a); // Try commenting this out and see if zig detects the memory leak!
+}
+
+test "grid cleanup after failed allocation during init" {
+    const helper = struct {
+        fn initAndDeinitGrid(a: std.mem.Allocator) !void {
+            var rng = std.Random.DefaultPrng.init(0);
+            var grid = try Grid.init(a, rng.random(), 20, 10, 12);
+            grid.deinit(a);
+        }
+    };
+
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, helper.initAndDeinitGrid, .{});
 }
