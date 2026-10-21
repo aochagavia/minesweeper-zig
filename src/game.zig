@@ -85,10 +85,23 @@ pub const Grid = struct {
         return error.OutOfBounds;
     }
 
+    pub fn cellView(self: *const Grid, x: usize, y: usize) error{OutOfBounds}!CellView {
+        const i = try self.coordsToGridIndex(x, y);
+        if (!self.visibleCells.isSet(i)) {
+            return .{ .hidden = .{ .marked = self.markedCells.isSet(i) } };
+        }
+
+        if (self.mineCells.isSet(i)) {
+            return .mine;
+        }
+
+        return .{ .clear = .{ .surroundingMines = self.surroundingMineCounts[i] } };
+    }
+
     pub fn revealCell(self: *Grid, x: usize, y: usize) error{OutOfBounds}!GameState {
         const i = try self.coordsToGridIndex(x, y);
 
-        if (self.visibleCells.isSet(i)) {
+        if (self.visibleCells.isSet(i) or self.markedCells.isSet(i)) {
             return .ongoing;
         }
         self.visibleCells.set(i);
@@ -130,6 +143,12 @@ pub const Grid = struct {
 };
 
 pub const GameState = enum { won, lost, ongoing };
+
+pub const CellView = union(enum) {
+    hidden: struct { marked: bool },
+    mine,
+    clear: struct { surroundingMines: usize },
+};
 
 const surrounding_offsets: [8]struct { HorizontalOffset, VerticalOffset } = .{
     .{ .left, .up },
