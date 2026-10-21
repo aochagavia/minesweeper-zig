@@ -1,6 +1,12 @@
 .{
     .name = .minesweeper,
     .version = "0.0.0",
+    .dependencies = .{
+        .raylib_zig = .{
+            .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#28bbe30112f605da918db00eff53a75ce1aa9180",
+            .hash = "raylib_zig-6.2.0-KE8RELGmBQDX1v1DqBN57pNxJ-b-MIa1S-M7NXT9Eplr",
+        },
+    },
     .fingerprint = 0xb5625ee1dc75dade, // Changing this has security and trust implications.
     .minimum_zig_version = "0.17.0",
     .paths = .{
