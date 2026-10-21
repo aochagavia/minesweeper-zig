@@ -20,7 +20,7 @@ pub fn main(init: std.process.Init) !void {
     defer grid.deinit(gpa);
 
     // First render
-    try grid.display(stdout_writer);
+    try minesweeper.printGrid(&grid, stdout_writer);
     try stdout_writer.flush();
 
     // Process player input
@@ -67,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         // Updated render
-        try grid.display(stdout_writer);
+        try minesweeper.printGrid(&grid, stdout_writer);
         try stdout_writer.flush();
     }
 }
