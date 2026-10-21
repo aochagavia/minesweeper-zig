@@ -2,38 +2,31 @@ const std = @import("std");
 const game = @import("../game.zig");
 const rl = @import("raylib");
 
-const ScreenParams = struct {
-    width: usize,
-    height: usize,
+// Minimal equivalent to raylib's `Vector2`, but stores `usize`
+const Vector2Usize = struct {
+    x: usize,
+    y: usize,
 
-    fn toVector2(self: ScreenParams) rl.Vector2 {
-        const screenWidth: f32 = @floatFromInt(self.width);
-        const screenHeight: f32 = @floatFromInt(self.height);
-        return .{
-            .x = screenWidth,
-            .y = screenHeight,
-        };
+    fn init(x: usize, y: usize) Vector2Usize {
+        return .{ .x = x, .y = y };
     }
-};
 
-const GridParams = struct {
-    width: usize,
-    height: usize,
+    fn toVector2(self: Vector2Usize) rl.Vector2 {
+        return .init(@floatFromInt(self.x), @floatFromInt(self.y));
+    }
 };
 
 const ScreenToGridMapping = struct {
     cellSize: rl.Vector2,
 
-    fn init(screen: ScreenParams, grid: GridParams) ScreenToGridMapping {
-        const cellWidth = @as(f32, @floatFromInt(screen.width)) / @as(f32, @floatFromInt(grid.width));
-        const cellHeight = @as(f32, @floatFromInt(screen.height)) / @as(f32, @floatFromInt(grid.height));
-        return .{ .cellSize = .{ .x = cellWidth, .y = cellHeight } };
+    fn init(screenSize: Vector2Usize, gridSize: Vector2Usize) ScreenToGridMapping {
+        return .{ .cellSize = screenSize.toVector2().divide(gridSize.toVector2()) };
     }
 
-    fn mapCoords(self: *const ScreenToGridMapping, pos: rl.Vector2) struct { usize, usize } {
+    fn mapCoords(self: *const ScreenToGridMapping, pos: rl.Vector2) Vector2Usize {
         const gridX: usize = @floor(pos.x / self.cellSize.x);
         const gridY: usize = @floor(pos.y / self.cellSize.y);
-        return .{ gridX, gridY };
+        return .init(gridX, gridY);
     }
 };
 
@@ -42,23 +35,15 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator) !void {
     io.random(std.mem.asBytes(&seed));
     var rng: std.Random.DefaultPrng = .init(seed);
 
-    const screenParams: ScreenParams = .{
-        .width = 600,
-        .height = 600,
-    };
+    const screenSizePx: Vector2Usize = comptime .init(600, 600);
+    const gridSize: Vector2Usize = .init(10, 10);
+    const screenToGrid = ScreenToGridMapping.init(screenSizePx, gridSize);
 
-    const gridParams: GridParams = .{
-        .width = 10,
-        .height = 10,
-    };
-
-    const screenToGrid = ScreenToGridMapping.init(screenParams, gridParams);
-
-    var grid = try game.Grid.init(allocator, rng.random(), gridParams.width, gridParams.height, 10);
+    var grid = try game.Grid.init(allocator, rng.random(), gridSize.x, gridSize.y, 10);
     defer grid.deinit(allocator);
     var gameState: game.GameState = .ongoing;
 
-    rl.initWindow(screenParams.width, screenParams.height, "Mine sweeper");
+    rl.initWindow(screenSizePx.x, screenSizePx.y, "Mine sweeper");
     rl.setTargetFPS(60);
     const font = try rl.getFontDefault();
     while (!rl.windowShouldClose()) {
@@ -66,7 +51,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator) !void {
         rl.beginDrawing();
         rl.clearBackground(rl.Color.blue);
         try drawGrid(font, &grid, screenToGrid.cellSize);
-        drawGameState(screenParams, gameState, font);
+        drawGameState(screenSizePx, gameState, font);
         rl.endDrawing();
 
         // Handle input
@@ -74,7 +59,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator) !void {
             if (rl.isKeyPressed(.enter)) {
                 // Initialize the new grid before freeing the old one, so we can swap it
                 // atomically (and hence prevent a double free if initialization fails).
-                const newGrid = try game.Grid.init(allocator, rng.random(), gridParams.width, gridParams.height, 10);
+                const newGrid = try game.Grid.init(allocator, rng.random(), gridSize.x, gridSize.y, 10);
                 grid.deinit(allocator);
                 grid = newGrid;
                 gameState = .ongoing;
@@ -84,16 +69,16 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator) !void {
         }
 
         if (rl.isMouseButtonPressed(.left)) {
-            const pos = rl.getMousePosition();
-            const gridX, const gridY = screenToGrid.mapCoords(pos);
-            gameState = grid.revealCell(gridX, gridY) catch {
+            const screenPos = rl.getMousePosition();
+            const gridPos = screenToGrid.mapCoords(screenPos);
+            gameState = grid.revealCell(gridPos.x, gridPos.y) catch {
                 std.debug.print("impossible", .{});
                 continue;
             };
         } else if (rl.isMouseButtonPressed(.right)) {
-            const pos = rl.getMousePosition();
-            const gridX, const gridY = screenToGrid.mapCoords(pos);
-            grid.markCell(gridX, gridY) catch {
+            const screenPos = rl.getMousePosition();
+            const gridPos = screenToGrid.mapCoords(screenPos);
+            grid.markCell(gridPos.x, gridPos.y) catch {
                 std.debug.print("impossible", .{});
                 continue;
             };
@@ -122,40 +107,32 @@ fn drawGrid(font: rl.Font, grid: *const game.Grid, cellSize: rl.Vector2) !void {
 
     for (0..grid.height) |y| {
         for (0..grid.width) |x| {
-            const cellPos: rl.Vector2 = .{ .x = @as(f32, @floatFromInt(x)) * cellSize.x, .y = @as(f32, @floatFromInt(y)) * cellSize.y };
+            const cellPos = cellSize.multiply(.init(@floatFromInt(x), @floatFromInt(y)));
 
             const view = try grid.cellView(x, y);
-            switch (view) {
-                .hidden => |c| {
-                    if (c.marked) {
-                        rl.drawRectangleV(cellPos.addValue(cellBorder), paddedCellSize, rl.Color.orange);
-                    } else {
-                        rl.drawRectangleV(cellPos.addValue(cellBorder), paddedCellSize, rl.Color.light_gray);
-                    }
-                },
-                .mine => {
-                    rl.drawRectangleV(cellPos.addValue(cellBorder), paddedCellSize, rl.Color.red);
-                },
-                .clear => |c| {
-                    if (c.surroundingMines > 0) {
-                        // Draw surrounding mines
-                        const s = intToStr[c.surroundingMines];
-                        const textSize = rl.measureTextEx(font, s, fontSize, fontSpacing);
-                        const textPos = cellPos.add(centerBox(cellSize, textSize));
-                        rl.drawRectangleV(cellPos.addValue(cellBorder), paddedCellSize, rl.Color.light_gray);
-                        rl.drawTextEx(font, s, textPos, fontSize, fontSpacing, rl.Color.black);
-                    }
-                },
+            const color: rl.Color = switch (view) {
+                .hidden => |c| if (c.marked) .orange else .light_gray,
+                .mine => .red,
+                // No surrounding mines = display the background color (i.e., we don't draw anything on top)
+                .clear => |c| if (c.surroundingMines > 0) .light_gray else continue,
+            };
+            rl.drawRectangleV(cellPos.addValue(cellBorder), paddedCellSize, color);
+
+            if (view == .clear) {
+                const s = intToStr[view.clear.surroundingMines];
+                const textSize = rl.measureTextEx(font, s, fontSize, fontSpacing);
+                const textPos = cellPos.add(centerBox(cellSize, textSize));
+                rl.drawTextEx(font, s, textPos, fontSize, fontSpacing, .black);
             }
         }
     }
 }
 
-fn drawGameState(screen: ScreenParams, state: game.GameState, font: rl.Font) void {
+fn drawGameState(screenSize: Vector2Usize, state: game.GameState, font: rl.Font) void {
     const fontSize = 50;
     const fontSpacing = 10;
 
-    const s: [:0]const u8 = switch (state) {
+    const msg: [:0]const u8 = switch (state) {
         .won => "You won!",
         .lost => "You lost!",
         .ongoing => return,
@@ -166,38 +143,29 @@ fn drawGameState(screen: ScreenParams, state: game.GameState, font: rl.Font) voi
     const hintFontSpacing = 2;
     const lineGap = 10;
 
-    const textSize = rl.measureTextEx(font, s, fontSize, fontSpacing);
+    const textSize = rl.measureTextEx(font, msg, fontSize, fontSpacing);
     const hintSize = rl.measureTextEx(font, hint, hintFontSize, hintFontSpacing);
-    const contentSize: rl.Vector2 = .{
-        .x = @max(textSize.x, hintSize.x),
-        .y = textSize.y + lineGap + hintSize.y,
-    };
+    const contentSize: rl.Vector2 = .init(@max(textSize.x, hintSize.x), textSize.y + lineGap + hintSize.y);
     const boxSize = contentSize.scale(1.2);
 
     // Overlay
-    rl.drawRectangle(0, 0, @as(i32, @intCast(screen.width)), @as(i32, @intCast(screen.height)), rl.Color.black.fade(0.5));
+    rl.drawRectangleV(.init(0, 0), screenSize.toVector2(), rl.Color.black.fade(0.5));
 
     // The actual text, boxed for better readability
-    const boxPos = centerBox(screen.toVector2(), boxSize);
-    rl.drawRectangle(@as(i32, @floor(boxPos.x)), @as(i32, @floor(boxPos.y)), @as(i32, @ceil(boxSize.x)), @as(i32, @ceil(boxSize.y)), rl.Color.light_gray);
+    const boxPos = centerBox(screenSize.toVector2(), boxSize);
+    rl.drawRectangleV(boxPos, boxSize, rl.Color.light_gray);
 
     // Both lines are horizontally centered within the content area, the hint below the main text
-    const contentPos = centerBox(screen.toVector2(), contentSize);
-    const textPos = contentPos.add(.{ .x = (contentSize.x - textSize.x) / 2, .y = 0 });
-    const hintPos = contentPos.add(.{ .x = (contentSize.x - hintSize.x) / 2, .y = textSize.y + lineGap });
-    rl.drawTextEx(font, s, textPos, fontSize, fontSpacing, rl.Color.black);
-    rl.drawTextEx(font, hint, hintPos, hintFontSize, hintFontSpacing, rl.Color.dark_gray);
+    const contentPos = centerBox(screenSize.toVector2(), contentSize);
+    const textPos = contentPos.add(.init((contentSize.x - textSize.x) / 2, 0));
+    const hintPos = contentPos.add(.init((contentSize.x - hintSize.x) / 2, textSize.y + lineGap));
+    rl.drawTextEx(font, msg, textPos, fontSize, fontSpacing, .black);
+    rl.drawTextEx(font, hint, hintPos, hintFontSize, hintFontSpacing, .dark_gray);
 }
 
+// Returns the position that centers `boxSize` within `containerSize`
+//
+// When the box doesn't fit (horizontally and/or vertically), the offending axes get clamped to 0
 fn centerBox(containerSize: rl.Vector2, boxSize: rl.Vector2) rl.Vector2 {
-    var computedPosition = rl.Vector2.zero();
-    if (boxSize.x < containerSize.x) {
-        computedPosition.x = containerSize.x / 2 - boxSize.x / 2;
-    }
-
-    if (boxSize.y < containerSize.y) {
-        computedPosition.y = containerSize.y / 2 - boxSize.y / 2;
-    }
-
-    return computedPosition;
+    return containerSize.subtract(boxSize).scale(0.5).max(.zero());
 }
